@@ -23,11 +23,38 @@ class IndexController extends Controller
            // $access_token=$this->get_access_token();  //跳方法  调 access_token  获取access_token
             $str=file_get_contents("php://input");
             $obj = simplexml_load_string($str,"SimpleXMLElement",LIBXML_NOCDATA);
-            $content="鹅鹅鹅，尚未开发....见谅";
+            $content="鹅鹅鹅，尚未开发....见谅,当前机器人已开发,您可以用输入或发送语音来与机器人进行聊天,输入“天气:地区”(如 天气:邯郸) 或 地区 来进行查询天气 ";
 
             file_put_contents("shuju.txt",$str,FILE_APPEND);
-                    $this->shuju($obj); // 入库数据
-//            file_put_contents("shuju.txt",$str,FILE_APPEND);//die;
+
+            if($obj->Event!="subscribe" && $obj->Event!="unsubscribe") {
+                        $this->shuju($obj); // 入库数据
+                    }
+
+            if($obj->EventKey=="qiandao") {
+                 $key = $obj->FromUserName;
+                 $times = date("Y-m-d", time());
+                 $date = Redis::zrange($key, 0, -1);
+                if ($date) {
+                     $date = $date[0];
+                 }
+                if ($date == $times) {
+                     $content = "您今日已经签到过了!";
+                } else {
+                         $zcard = Redis::zcard($key);
+                    if ($zcard >= 1) {
+                        Redis::zremrangebyrank($key, 0, 0);
+                    }
+                    $keys = json_decode(json_encode($obj),true);
+
+
+                    $keys = $keys['FromUserName'];
+                    $zincrby = Redis::zincrby($key, 1, $keys);
+                    $zadd = Redis::zadd($key, $zincrby, $times);
+                    $content = "签到成功您以积累签到" . $zincrby . "天!";
+                }
+
+            }
             switch ($obj->MsgType) {
                 case "event":
                     if ($obj->Event == "subscribe") {
@@ -146,13 +173,21 @@ class IndexController extends Controller
 //                            file_put_contents("jqr.txt",$shuju["results"][0]["values"]["text"]);
                          if($data["intent"]["code"]!=5000) {
                              $content = $data["results"][0]["values"]["text"];
+                                if($content=="请求超过限制"){
+                                    $content="";
+                                    $content.="机器人出错,可能是接口调用达到上限,请联系懒癌患者的管理员,手机号:13521378470 QQ 2397075084,报错了可回复,看到也是不回的(谨记)";
+                                    $content.="当前天气已开发,如果您想查看天气情况,请输入天气:地址(如 天气:邯郸,会给您返回邯郸当天及未来几天的天气情况.注意 “:”为英文的冒号,只支持国内天气查询)";
+                                }
+
                          }else{
-                             $content="";
-                             $content.="机器人出错,可能是接口调用达到上限,请联系懒癌患者的管理员,手机号:13521378470 QQ 2397075084,报错了可回复,看到也是不回的(谨记)";
-                             $content.="当前天气已开发,如果您想查看天气情况,请输入天气:地址(如 天气:邯郸,会给您返回邯郸当天及未来几天的天气情况.注意 “:”为英文的冒号,只支持国内天气查询)";
+//                             $content="";
+//                             $content.="机器人出错,可能是接口调用达到上限,请联系懒癌患者的管理员,手机号:13521378470 QQ 2397075084,报错了可回复,看到也是不回的(谨记)";
+//                             $content.="当前天气已开发,如果您想查看天气情况,请输入天气:地址(如 天气:邯郸,会给您返回邯郸当天及未来几天的天气情况.注意 “:”为英文的冒号,只支持国内天气查询)";
 
                          }
                             }
+
+
                     break;
                 // 聊天机器人  图灵机器人
                 case "voice": //语音类型为 voice  // 在公众号中使用 语音  就调用 图灵机器人进行对话
@@ -261,95 +296,78 @@ class IndexController extends Controller
 
 
 
-public function Caidan(){
-          
-         $url="https://api.weixin.qq.com/cgi-bin/menu/create?access_token=".$this->get_access_token();
-         $data=[
-         "button"=>
-              [
-               
-
-                [  
-                // "type"=>"view",
-                // "name"=>"搜索",
-                // "url"=>"https://www.baidu.com/"
-                  "name"=>"villain.",
-                  "sub_button"=>
-                  [
-                    //  天气
+    public function Caidan(){
+        $url="https://api.weixin.qq.com/cgi-bin/menu/create?access_token=".$this->get_access_token();
+        $data=[
+            "button"=>
+                [
                     [
-                    "type"=>"pic_photo_or_album", 
-                    "name"=>"相册", 
-                    "key"=>"rselfmenu_1_1", 
-                    "sub_button"=>[ ]
+                        // "type"=>"view",
+                        // "name"=>"搜索",
+                        // "url"=>"https://www.baidu.com/"
+                        "name"=>"villain.",
+                        "sub_button"=>
+                            [
+                                //  天气
+                                [
+                                    "type"=>"pic_photo_or_album",
+                                    "name"=>"相册",
+                                    "key"=>"rselfmenu_1_1",
+                                    "sub_button"=>[ ]
+                                ],
+                                [
+                                    "type"=>"click",
+                                    "name"=>"签到",
+                                    "key"=>"qiandao"
+                                    // ""
+                                ]
+                            ]
                     ],
                     [
-                     "type"=>"click",
-                     "name"=>"签到", 
-                     "key"=>"qiandao"
-                     // ""
-                    ]         
-
-
-                  ]
-
-
-                ],
-
-
-                [
-                 "name"=>"娱乐",
-                 "sub_button"=>
-                 [
+                        "name"=>"娱乐",
+                        "sub_button"=>
+                            [
+                                [
+                                    "type"=>"view",
+                                    "name"=>"视频",
+                                    "url"=>"https://v.qq.com/"
+                                ],
+                                [
+                                    "type"=>"view",
+                                    "name"=>"音乐",
+                                    "url"=>"https://music.163.com/"
+                                ],
+                                [
+                                    "type"=>"view",
+                                    "name"=>"游戏直播",
+                                    "url"=>"https://www.huya.com/"
+                                ]
+                            ]
+                    ],
                     [
-                     "type"=>"view",
-                      "name"=>"视频",
-                     "url"=>"https://v.qq.com/"
-                     ],
-                    [
-                     "type"=>"view",
-                     "name"=>"音乐",
-                      "url"=>"https://music.163.com/"
-                     ],
-                    [
-                     
-                      "type"=>"view",
-                      "name"=>"游戏直播",
-                     "url"=>"https://www.huya.com/"
+                        "name"=>"购物",
+                        "sub_button"=>
+                            [
+                                [
+                                    "type"=>"view",
+                                    "name"=>"京东",
+                                    "url"=>"https://www.jd.com/"
+                                ],
+                                [
+                                    "type"=>"view",
+                                    "name"=>"淘宝",
+                                    "url"=>"https://www.taobao.com/"
+                                ],
+                                [
+                                    "type"=>"view",
+                                    "name"=>"天猫",
+                                    "url"=>"https://www.tmall.com/"
+                                ]
+                            ]
                     ]
                 ]
-                ],
-
-
-                [
-                "name"=>"购物",
-                "sub_button"=> 
-                [
-                    [
-                     "type"=>"view",
-                      "name"=>"京东",
-                     "url"=>"https://www.jd.com/"
-                     ],
-                    [
-                     "type"=>"view",
-                     "name"=>"淘宝",
-                      "url"=>"https://www.taobao.com/"
-                     ],
-                    [
-                     
-                      "type"=>"view",
-                      "name"=>"天猫",
-                     "url"=>"https://www.tmall.com/"
-                    ]
-                 ]
-              ]  
-
-
-
-
-             ]
         ];
-         $data=json_encode($data,JSON_UNESCAPED_UNICODE);
+        $data=json_encode($data,JSON_UNESCAPED_UNICODE);
 
         // $client=new Client();
         // $res=$client->request("POST",$url,[
@@ -359,66 +377,71 @@ public function Caidan(){
         // $r=$res->getBody();
         // dd($r);
 
-         // $client=new Client();
-         //$res=$client->request("GET",$url,["verify"=>false]);
-         // $r=$res->getBody();
-         //dd($r);
+        // $client=new Client();
+        //$res=$client->request("GET",$url,["verify"=>false]);
+        // $r=$res->getBody();
+        //dd($r);
 
 
         $k=$this->http_post($url,$data);
-         dd($k);
+        dd($k);
 
-
-}
-
-    public function  shuju($obj){
-
-
-        if($obj->MsgType=="image"){
-            $data=[
-                "url"=>$obj->PicUrl,
-                "MediaId"=>$obj->MediaId,
-                "MsgId"=>$obj->MsgId,
-                "time"=>time(),
-                "type"=>"image",
-                "openid"=>$obj->FromUserName
-            ];
-        }
-        if($obj->MsgType=="video"){
-            $data=[
-                "ThumbMediaId"=>$obj->ThumbMediaId,
-                "MediaId"=>$obj->MediaId,
-                "MsgId"=>$obj->MsgId,
-                "time"=>time(),
-                "type"=>"video",
-                "openid"=>$obj->FromUserName
-
-            ];
-        }
-        if($obj->MsgType=="text"){
-            $data=[
-                "MsgId"=>$obj->MsgId,
-                "time"=>time(),
-                "type"=>"text",
-                "openid"=>$obj->FromUserName,
-                "Content"=>$obj->Content
-            ];
-
-
-        }
-        if($obj->MsgType=="voice"){
-            $data=[
-                "MediaId"=>$obj->MediaId,
-                "MsgId"=>$obj->MsgId,
-                "time"=>time(),
-                "type"=>"voice",
-                "openid"=>$obj->FromUserName
-            ];
-        }
-        DB::table("xinxi")->insert($data);
 
     }
+    public function  shuju($obj){
 
+            $res=DB::table("xinxi")->where("MediaId",$obj->MediaId)->first();
+
+    if(empty($res)) { //isset
+        $url="https://api.weixin.qq.com/cgi-bin/media/get?access_token=".$this->get_access_token()."&media_id=".$obj->MediaId;
+            $client= new Client();
+        $data=[
+                "time" => time(),
+                "type" => $obj->MsgType,
+                "openid" => $obj->FromUserName,
+                "MsgId" => $obj->MsgId,
+            ];
+        if ($obj->MsgType == "image") {
+            $data["url"]=$obj->PicUrl;
+            $data["MediaId"]=$obj->MediaId;
+//            $image="/image/wusha.jpg";
+
+            $res=$client->request("GET",$url,["verify"=>false]);
+             $r=$res->getBody();
+            file_put_contents("shahaozi.jpg",$r);
+
+
+        }
+        if ($obj->MsgType == "video") {
+            $data["MediaId"]=$obj->MediaId;
+            $res=$client->request("GET",$url,["verify"=>false]);
+            $r=$res->getBody();
+            file_put_contents("video.mp4",$r);
+
+        }
+        if ($obj->MsgType == "text") {
+            $data["Content"]=$obj->Content;
+        }
+        if ($obj->MsgType == "voice") {
+            $data["MediaId"]=$obj->MediaId;
+            $res=$client->request("GET",$url,["verify"=>false]);
+            $r=$res->getBody();
+            file_put_contents("voice.amr",$r);
+
+
+        }
+        DB::table("xinxi")->insert($data);
+        }
+
+
+    } //数据入库
+//    function array_xml($a){
+//
+//        $obj = simplexml_load_string($a, "SimpleXMLElement", LIBXML_NOCDATA);
+//        $datat = json_decode(json_encode($obj),true);
+//        return $datat;
+//
+//    }
 
 
 }
